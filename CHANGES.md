@@ -19,6 +19,10 @@
 
 <!-- Changes that affect Black's stable style -->
 
+- Fix the parentheses of a tuple used as a context manager being removed when the
+  `with` statement has other context managers or the tuple is wrapped in extra
+  parentheses (for example `with c, (a, b):` or `with ((a, b)):`), which changed
+  the number of context managers (#XXXX)
 - Fix crash when `# fmt: skip` is placed on a one-line function or class with PEP 695
   type parameters (#5429)
 - Fix an inline comment after the closing bracket of optional parentheses being moved

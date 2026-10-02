@@ -47,7 +47,6 @@ from black.nodes import (
     ensure_visible,
     fstring_tstring_to_string,
     get_annotation_type,
-    has_sibling_with_type,
     is_arith_like,
     is_async_stmt_or_funcdef,
     is_atom_with_invisible_parens,
@@ -73,6 +72,7 @@ from black.nodes import (
     is_walrus_assignment,
     is_yield,
     syms,
+    unwrap_singleton_parenthesis,
     wrap_in_parentheses,
 )
 from black.numerics import normalize_numeric_literal
@@ -2084,8 +2084,11 @@ def remove_with_parens(
             remove_brackets_around_comma=True,
         ):
             wrap_in_parentheses(parent, node, visible=False)
-        if isinstance(node.children[1], Node):
-            remove_with_parens(node.children[1], node, mode=mode, features=features)
+        middle = node.children[1]
+        # A tuple context manager in redundant parentheses must keep its own, but
+        # recursing would check it against this atom instead of the `with`.
+        if isinstance(middle, Node) and not _is_tuple_context_manager(middle, parent):
+            remove_with_parens(middle, node, mode=mode, features=features)
     elif node.type == syms.testlist_gexp:
         for child in node.children:
             if isinstance(child, Node):
@@ -2101,6 +2104,48 @@ def remove_with_parens(
             remove_brackets_around_comma=True,
         ):
             wrap_in_parentheses(node, node.children[0], visible=False)
+
+
+def _is_tuple_context_manager(node: LN, parent: LN) -> bool:
+    """Do the parentheses of `node` keep a tuple a single context manager?
+
+    They are not optional: `with c, (a, b):` has two context managers, while
+    `with c, a, b:` has three, and `with ((a, b)):` has one, while `with (a, b):`
+    has two on Python 3.9+.
+
+    `parent` is the `with_stmt`, or the `testlist_gexp` that holds its context
+    managers once they are wrapped in parentheses (see `_maybe_wrap_cms_in_parens`).
+    For nested parentheses it is the parent of the outermost pair.
+    """
+    if parent.type not in {syms.with_stmt, syms.testlist_gexp}:
+        return False
+
+    has_other_context_managers = any(
+        child.type == token.COMMA for child in parent.children
+    )
+    if _is_tuple_expression(node):
+        # Either there are other context managers next to it, or the tuple sits in
+        # redundant parentheses that are about to be removed.
+        return has_other_context_managers or node.parent is not parent
+
+    # `with ((a, b)):` -- the outer pair is what keeps `(a, b)` from being read as
+    # two context managers. A walrus or starred element can't be a context manager,
+    # so `(x := a, y := b)` stays a tuple and the outer pair is redundant there.
+    inner = unwrap_singleton_parenthesis(node) if node.type == syms.atom else None
+    return (
+        not has_other_context_managers
+        and inner is not None
+        and _is_tuple_expression(inner)
+        and not is_tuple_containing_walrus(inner)
+        and not is_tuple_containing_star(inner)
+    )
+
+
+def _is_tuple_expression(node: LN) -> bool:
+    """Is `node` a parenthesized tuple, not a group of `x as y` context managers?"""
+    return is_tuple(node) and not any(
+        child.type == syms.asexpr_test for child in node.children[1].children
+    )
 
 
 def _atom_has_magic_trailing_comma(node: LN, mode: Mode) -> bool:
@@ -2179,11 +2224,7 @@ def maybe_make_parens_invisible_in_atom(
         or is_empty_tuple(node)
         or is_one_tuple(node)
         or (is_tuple(node) and parent.type == syms.asexpr_test)
-        or (
-            is_tuple(node)
-            and parent.type == syms.with_stmt
-            and has_sibling_with_type(node, token.COMMA)
-        )
+        or _is_tuple_context_manager(node, parent)
         or (is_yield(node) and parent.type != syms.expr_stmt)
         or (
             # This condition tries to prevent removing non-optional brackets
