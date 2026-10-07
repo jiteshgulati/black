@@ -193,8 +193,10 @@ def parse_ast(src: str) -> ast.AST:
 
 def _normalize(lineend: str, value: str) -> str:
     # To normalize, we strip any leading and trailing space from
-    # each line...
-    stripped: list[str] = [i.strip() for i in value.splitlines()]
+    # each line... Split on "\n" only: `str.splitlines()` also splits on
+    # characters like form feeds or U+2028, which would hide them being
+    # turned into line breaks.
+    stripped: list[str] = [i.strip() for i in value.split("\n")]
     normalized = lineend.join(stripped)
     # ...and remove any blank lines at the beginning and end of
     # the whole string

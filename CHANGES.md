@@ -19,6 +19,10 @@
 
 <!-- Changes that affect Black's stable style -->
 
+- Fix characters such as form feeds, U+0085 or U+2028 inside a multiline docstring being
+  turned into line breaks, which changed the docstring and the indentation of its lines.
+  They don't end a line in Python source, but `str.splitlines()` splits on them, and the
+  AST safety check normalized docstrings the same way, so it didn't notice (#XXXX)
 - Fix crash when `# fmt: skip` is placed on a one-line function or class with PEP 695
   type parameters (#5429)
 - Fix an inline comment after the closing bracket of optional parentheses being moved

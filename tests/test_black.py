@@ -3567,6 +3567,21 @@ class TestASTSafety(BlackBaseTestCase):
             should_fail=True,
         )
 
+    def test_assert_equivalent_docstring_line_separators(self) -> None:
+        # `str.splitlines()` splits on these characters, but they don't end a line
+        # in Python source. Turning one into a line break changes the docstring,
+        # so the check must not normalize that difference away.
+        for codepoint in (0x0B, 0x0C, 0x1C, 0x1D, 0x1E, 0x85, 0x2028, 0x2029):
+            char = chr(codepoint)
+            with self.subTest(codepoint=hex(codepoint)):
+                source = f'def f():\n    """Summary.\n\n    left{char}right\n    """\n'
+                self.check_ast_equivalence(source, source)
+                self.check_ast_equivalence(
+                    source,
+                    'def f():\n    """Summary.\n\n    left\n    right\n    """\n',
+                    should_fail=True,
+                )
+
     def test_equivalency_ast_parse_failure_includes_error(self) -> None:
         with pytest.raises(SourceASTParseError) as err:
             black.assert_equivalent("a«»a  = 1", "a«»a  = 1")

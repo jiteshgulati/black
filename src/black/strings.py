@@ -51,9 +51,13 @@ def lines_with_leading_tabs_expanded(s: str) -> list[str]:
 
     Black normalizes code indentation to four-space columns, so leading tabs in
     docstrings need the same width to keep relative indentation stable.
+
+    Only a line feed ends a line in Python source, so the string is split on
+    line feeds alone. `str.splitlines()` would also split on characters such as
+    form feeds or U+2028, which are part of the docstring's text.
     """
     lines = []
-    for line in s.splitlines():
+    for line in s.split("\n"):
         stripped_line = line.lstrip()
         if not stripped_line or stripped_line == line:
             lines.append(line)
@@ -61,8 +65,6 @@ def lines_with_leading_tabs_expanded(s: str) -> list[str]:
             prefix_length = len(line) - len(stripped_line)
             prefix = line[:prefix_length].expandtabs(4)
             lines.append(prefix + stripped_line)
-    if s.endswith("\n"):
-        lines.append("")
     return lines
 
 
